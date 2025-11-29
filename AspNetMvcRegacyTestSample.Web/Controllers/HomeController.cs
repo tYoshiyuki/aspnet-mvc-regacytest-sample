@@ -1,4 +1,5 @@
 ﻿using System.Web.Mvc;
+using AspNetMvcRegacyTestSample.Web.Models;
 
 namespace AspNetMvcRegacyTestSample.Web.Controllers
 {
@@ -13,14 +14,23 @@ namespace AspNetMvcRegacyTestSample.Web.Controllers
         {
             ViewBag.Message = "Your application description page.";
 
-            return View();
+            return View("About", new SampleViewModel
+            {
+                Id = 1,
+                Name = "Sample Name"
+            });
         }
 
         public ActionResult Contact()
         {
             ViewBag.Message = "Your contact page.";
 
-            return View();
+            return View("Contact");
+        }
+
+        public ActionResult Redirect()
+        {
+            return RedirectToAction("Index");
         }
     }
 }
