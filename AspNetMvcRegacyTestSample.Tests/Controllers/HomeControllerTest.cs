@@ -9,10 +9,9 @@ namespace AspNetMvcRegacyTestSample.Tests.Controllers
     [TestClass]
     public class HomeControllerTest
     {
-        [TestInitialize]
-        public void TestInitialize()
+        [ClassInitialize]
+        public static void ClassInitialize(TestContext testContext)
         {
-            // 各テストの前にルートを初期化
             RoutingTestHelper.InitializeRoutes();
         }
 

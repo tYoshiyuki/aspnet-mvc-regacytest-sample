@@ -5,15 +5,17 @@ namespace AspNetMvcRegacyTestSample.Web.Controllers
     /// <summary>
     /// 属性ルーティングを使用するコントローラーの例
     /// </summary>
-    [RoutePrefix("Product"), Route("{action}")]
+    [RoutePrefix("Product")]
     public class ProductController : Controller
     {
+        [Route("Index")]
         [HttpGet]
         public ActionResult Index()
         {
             return View();
         }
 
+        [Route("Details")]
         [HttpPost]
         public ActionResult Details(int id)
         {
@@ -21,12 +23,14 @@ namespace AspNetMvcRegacyTestSample.Web.Controllers
             return View();
         }
 
+        [Route("List")]
         [HttpGet]
         public ActionResult List()
         {
             return View();
         }
 
+        [Route("ByCategory")]
         [HttpGet]
         public ActionResult ByCategory(string category, int id)
         {
@@ -35,6 +39,7 @@ namespace AspNetMvcRegacyTestSample.Web.Controllers
             return View();
         }
 
+        [Route("Search")]
         [HttpGet]
         public ActionResult Search(string keyword = null)
         {

@@ -24,17 +24,20 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
         public static void InitializeRoutes()
         {
             routes = new RouteCollection();
-            
+
             // RouteConfigからアセンブリを取得
             if (controllerAssembly == null)
             {
                 controllerAssembly = typeof(RouteConfig).Assembly;
             }
-            
+
             // 通常のルーティングを登録
             // 注意: 属性ルーティングはユニットテスト環境では登録できないため、
             // 属性を直接チェックするAssertAttributeRouteExistsメソッドを使用してください
             RouteConfig.RegisterRoutes(routes);
+
+            // 属性ルーティングの定義を初期化
+            AttributeRouteRegistry.Initialize(controllerAssembly);
         }
 
         /// <summary>
@@ -91,38 +94,19 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
         }
 
         /// <summary>
-        /// 属性ルーティングのURL設定が正しいことを検証します（URLから自動推測）
+        /// 属性ルーティングのURL定義が AttributeRouteRegistry に存在することを確認します
         /// </summary>
-        /// <param name="url">テスト対象のURL</param>
+        /// <param name="url">テスト対象のURLテンプレート（例: "users/{id}"）</param>
         /// <param name="httpMethod">HTTPメソッド（GET、POSTなど）。省略時は"GET"</param>
         public static void AssertAttributeRouteExists(string url, string httpMethod = "GET")
         {
-            // URLからコントローラー名とアクション名を推測
-            var urlParts = url.TrimStart('/').Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-            Assert.IsTrue(urlParts.Length >= 2, $"URL '{url}' からコントローラー名とアクション名を取得できませんでした");
-
-            var controllerName = urlParts[0];
-            var actionName = urlParts[1];
-
-            // コントローラーの型を推測
-            var controllerType = FindControllerType(controllerName);
-            Assert.IsNotNull(controllerType, $"コントローラー '{controllerName}Controller' が見つかりませんでした");
-
-            // アクションメソッドが存在することを確認
-            var actionMethod = controllerType.GetMethod(actionName);
-            Assert.IsNotNull(actionMethod, $"{controllerName}Controller.{actionName}アクションメソッドが存在しません");
-
-            // 属性ルーティングの属性をチェック
-            var routePrefix = GetRoutePrefix(controllerType);
-            var routeTemplate = GetRouteTemplate(controllerType, actionMethod);
-            var actualUrl = BuildAttributeRouteUrl(routePrefix, routeTemplate, actionName);
-
-            // URLが一致することを確認
-            Assert.AreEqual(url, actualUrl, 
-                $"属性ルーティングのURLが一致しません。期待値: {url}, 実際の値: {actualUrl}");
-
-            // HTTPメソッド属性を確認
-            ValidateHttpMethodAttribute(actionMethod, httpMethod);
+            var definition = AttributeRouteRegistry.GetDefinition(url, httpMethod);
+            Assert.IsNotNull(
+                definition,
+                $"[属性ルーティング検証エラー] " +
+                $"URL: '{url}' ({httpMethod}) に対応する [Route] 属性が見つかりませんでした。" +
+                "RoutePrefixやRoute属性の記述、またはHTTPメソッド属性を確認してください。"
+            );
         }
 
         /// <summary>
@@ -178,7 +162,7 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
 
             // コントローラー名から型名を構築（例: "Home" → "HomeController"）
             var controllerTypeName = $"{controllerName}Controller";
-            
+
             // 動的に取得した名前空間を使用して検索
             var possibleNamespaces = GetControllerNamespaces();
 
@@ -186,7 +170,7 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
             {
                 var fullTypeName = string.IsNullOrEmpty(ns) ? controllerTypeName : $"{ns}.{controllerTypeName}";
                 var controllerType = controllerAssembly.GetType(fullTypeName);
-                
+
                 if (controllerType != null && typeof(Controller).IsAssignableFrom(controllerType))
                 {
                     return controllerType;
@@ -195,9 +179,9 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
 
             // 名前空間が見つからない場合、アセンブリ全体を検索
             var allControllerTypes = controllerAssembly.GetTypes()
-                .Where(t => typeof(Controller).IsAssignableFrom(t) && 
-                           !t.IsAbstract && 
-                           t.Name.Equals(controllerTypeName, StringComparison.OrdinalIgnoreCase));
+                .Where(t => typeof(Controller).IsAssignableFrom(t) &&
+                            !t.IsAbstract &&
+                            t.Name.Equals(controllerTypeName, StringComparison.OrdinalIgnoreCase));
 
             return allControllerTypes.FirstOrDefault();
         }
@@ -255,18 +239,18 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
             {
                 // ルート名前空間を推測（最初の名前空間のルート部分を取得）
                 var firstNamespace = namespaces[0];
-                var rootNamespace = firstNamespace.Contains('.') 
+                var rootNamespace = firstNamespace.Contains('.')
                     ? firstNamespace.Substring(0, firstNamespace.IndexOf('.'))
                     : firstNamespace;
-                
+
                 var namespacesList = namespaces.ToList();
-                
+
                 // ルート名前空間がまだ含まれていない場合は追加
                 if (!namespacesList.Contains(rootNamespace))
                 {
                     namespacesList.Add(rootNamespace);
                 }
-                
+
                 namespaces = namespacesList.ToArray();
             }
 
@@ -326,11 +310,11 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
             var httpRequest = CreateHttpRequest(url, httpMethod);
             var response = new HttpResponse(new System.IO.StringWriter());
             var httpContext = new HttpContext(httpRequest, response);
-            
+
             // カスタムHttpRequestWrapperを使用
             var requestWrapper = new TestHttpRequestWrapper(httpRequest, url, httpMethod);
             var contextWrapper = new TestHttpContextWrapper(httpContext, requestWrapper);
-            
+
             return contextWrapper;
         }
 
@@ -343,16 +327,16 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
         private static HttpRequest CreateHttpRequest(string url, string httpMethod)
         {
             var request = new HttpRequest("", "http://localhost" + url, "");
-            
+
             // ApplicationPathを設定
             SetFieldValue(request, "_applicationPath", "/");
-            
+
             // HTTPメソッドを設定
             SetFieldValue(request, "_httpMethod", httpMethod);
-            
+
             // AppRelativeCurrentExecutionFilePathを設定
             SetFieldValue(request, "_appRelativeCurrentExecutionFilePath", "~" + url);
-            
+
             return request;
         }
 
@@ -384,7 +368,7 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
             /// <param name="httpRequest">ラップするHttpRequest</param>
             /// <param name="url">テスト対象のURL</param>
             /// <param name="httpMethod">HTTPメソッド（GET、POSTなど）</param>
-            public TestHttpRequestWrapper(HttpRequest httpRequest, string url, string httpMethod) 
+            public TestHttpRequestWrapper(HttpRequest httpRequest, string url, string httpMethod)
                 : base(httpRequest)
             {
                 this.url = url;
@@ -408,107 +392,13 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
             /// </summary>
             /// <param name="httpContext">ラップするHttpContext</param>
             /// <param name="request">テスト用のHttpRequestBase</param>
-            public TestHttpContextWrapper(HttpContext httpContext, HttpRequestBase request) 
+            public TestHttpContextWrapper(HttpContext httpContext, HttpRequestBase request)
                 : base(httpContext)
             {
                 Request = request;
             }
 
             public override HttpRequestBase Request { get; }
-        }
-
-        /// <summary>
-        /// コントローラーのRoutePrefix属性を取得します
-        /// </summary>
-        /// <param name="controllerType">コントローラーの型</param>
-        /// <returns>RoutePrefix属性の値。属性が存在しない場合は空文字列</returns>
-        private static string GetRoutePrefix(Type controllerType)
-        {
-            var routePrefixAttribute = controllerType.GetCustomAttribute(typeof(RoutePrefixAttribute)) as RoutePrefixAttribute;
-            return routePrefixAttribute?.Prefix ?? string.Empty;
-        }
-
-        /// <summary>
-        /// ルートテンプレートを取得します（コントローラーレベルまたはアクションレベル）
-        /// </summary>
-        /// <param name="controllerType">コントローラーの型</param>
-        /// <param name="actionMethod">アクションメソッド</param>
-        /// <returns>ルートテンプレート。見つからない場合は"{action}"</returns>
-        private static string GetRouteTemplate(Type controllerType, MethodInfo actionMethod)
-        {
-            // アクションレベルのRoute属性を優先
-            if (actionMethod.GetCustomAttribute(typeof(RouteAttribute)) is RouteAttribute routeAttribute)
-            {
-                return routeAttribute.Template;
-            }
-
-            // コントローラーレベルのRoute属性を確認
-            if (controllerType.GetCustomAttribute(typeof(RouteAttribute)) is RouteAttribute controllerRouteAttribute)
-            {
-                return controllerRouteAttribute.Template;
-            }
-
-            return "{action}"; // デフォルト
-        }
-
-        /// <summary>
-        /// 属性ルーティングのURLを構築します
-        /// </summary>
-        /// <param name="routePrefix">ルートプレフィックス</param>
-        /// <param name="routeTemplate">ルートテンプレート</param>
-        /// <param name="actionName">アクション名</param>
-        /// <returns>構築されたURL</returns>
-        private static string BuildAttributeRouteUrl(string routePrefix, string routeTemplate, string actionName)
-        {
-            var url = string.Empty;
-
-            // RoutePrefixを追加
-            if (!string.IsNullOrEmpty(routePrefix))
-            {
-                url = "/" + routePrefix.TrimStart('/');
-            }
-
-            // Routeテンプレートを処理
-            if (!string.IsNullOrEmpty(routeTemplate))
-            {
-                // {action}を実際のアクション名に置換
-                var processedTemplate = routeTemplate.Replace("{action}", actionName);
-                
-                if (processedTemplate.StartsWith("/"))
-                {
-                    // 絶対パスの場合、RoutePrefixを無視
-                    url = processedTemplate;
-                }
-                else
-                {
-                    // 相対パスの場合、RoutePrefixに追加
-                    if (!string.IsNullOrEmpty(url))
-                    {
-                        url += "/" + processedTemplate.TrimStart('/');
-                    }
-                    else
-                    {
-                        url = "/" + processedTemplate.TrimStart('/');
-                    }
-                }
-            }
-            else
-            {
-                // テンプレートがない場合、アクション名を追加
-                if (!string.IsNullOrEmpty(url))
-                {
-                    url += "/" + actionName;
-                }
-                else
-                {
-                    url = "/" + actionName;
-                }
-            }
-
-            // 重複するスラッシュを削除
-            url = url.Replace("//", "/");
-            
-            return url;
         }
     }
 }

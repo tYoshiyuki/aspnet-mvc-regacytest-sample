@@ -73,6 +73,7 @@
   <ItemGroup>
     <Compile Include="Controllers\HomeControllerTest.cs" />
     <Compile Include="Controllers\ProductControllerTest.cs" />
+    <Compile Include="Helpers\AttributeRouteRegistry.cs" />
     <Compile Include="Helpers\RoutingTestHelper.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

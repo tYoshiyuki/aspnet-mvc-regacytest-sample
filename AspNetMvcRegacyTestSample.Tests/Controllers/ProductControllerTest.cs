@@ -6,6 +6,12 @@ namespace AspNetMvcRegacyTestSample.Tests.Controllers
     [TestClass]
     public class ProductControllerTest
     {
+        [ClassInitialize]
+        public static void ClassInitialize(TestContext testContext)
+        {
+            RoutingTestHelper.InitializeRoutes();
+        }
+
         [TestMethod]
         public void URL_属性ルーティング_Product_Index_に対応するアクションが存在する()
         {
