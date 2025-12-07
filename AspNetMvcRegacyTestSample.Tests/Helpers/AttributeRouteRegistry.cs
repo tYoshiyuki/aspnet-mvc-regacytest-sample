@@ -44,6 +44,7 @@ namespace AspNetMvcRegacyTestSample.Tests.Helpers
                     }
 
                     // URLの結合
+                    // NOTE: "~/" や "/" で始まる場合は絶対パス扱いとし、Prefix を無視する
                     string combinedUrl;
                     if (routeAttr.Template.StartsWith("~") || routeAttr.Template.StartsWith("/"))
                     {
